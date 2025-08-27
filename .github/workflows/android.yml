@@ -12,6 +12,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Use Java 17 (required by recent Android Gradle Plugin)
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -20,12 +27,16 @@ jobs:
       - name: Flutter version
         run: flutter --version
 
-      # Create missing android/ ios/ etc.
+      # Create missing platform folders (android/ etc.) from pubspec/lib
       - name: Scaffold Flutter project
         run: flutter create .
 
       - name: Install dependencies
         run: flutter pub get
+
+      # (Optional) Accept Android licenses if the image has the SDK installed
+      - name: Accept Android licenses (best-effort)
+        run: yes | flutter doctor --android-licenses || true
 
       - name: Build debug APK
         run: flutter build apk --debug
