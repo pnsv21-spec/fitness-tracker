@@ -88,49 +88,38 @@ class DailyProgress {
   final DateTime date;
   final double? weightKg;
   final int? proteinG;
-  final bool measurementsTaken;
-  final double? waistCm;
-  final double? chestCm;
-  final double? hipsCm;
 
   DailyProgress({
     required this.date,
     this.weightKg,
     this.proteinG,
-    this.measurementsTaken = false,
-    this.waistCm,
-    this.chestCm,
-    this.hipsCm,
   });
 
   Map<String, dynamic> toJson() => {
         'date': date.toIso8601String(),
         'weightKg': weightKg,
         'proteinG': proteinG,
-        'measurementsTaken': measurementsTaken,
-        'waistCm': waistCm,
-        'chestCm': chestCm,
-        'hipsCm': hipsCm,
       };
   factory DailyProgress.fromJson(Map<String, dynamic> j) => DailyProgress(
         date: DateTime.tryParse(j['date'] ?? '') ?? DateTime.now(),
         weightKg: (j['weightKg'] as num?)?.toDouble(),
         proteinG: (j['proteinG'] as num?)?.toInt(),
-        measurementsTaken: j['measurementsTaken'] == true,
-        waistCm: (j['waistCm'] as num?)?.toDouble(),
-        chestCm: (j['chestCm'] as num?)?.toDouble(),
-        hipsCm: (j['hipsCm'] as num?)?.toDouble(),
       );
 }
 
 class Profile {
   final int? age;
   final int? heightCm;
-  Profile({this.age, this.heightCm});
+  final double? weightKg; // NEW in profile
 
-  Map<String, dynamic> toJson() => {'age': age, 'heightCm': heightCm};
-  factory Profile.fromJson(Map<String, dynamic> j) =>
-      Profile(age: (j['age'] as num?)?.toInt(), heightCm: (j['heightCm'] as num?)?.toInt());
+  Profile({this.age, this.heightCm, this.weightKg});
+
+  Map<String, dynamic> toJson() => {'age': age, 'heightCm': heightCm, 'weightKg': weightKg};
+  factory Profile.fromJson(Map<String, dynamic> j) => Profile(
+        age: (j['age'] as num?)?.toInt(),
+        heightCm: (j['heightCm'] as num?)?.toInt(),
+        weightKg: (j['weightKg'] as num?)?.toDouble(),
+      );
 }
 
 class AppData {
@@ -155,9 +144,14 @@ class AppData {
 
   factory AppData.fromJson(Map<String, dynamic> j) => AppData(
         profile: Profile.fromJson((j['profile'] as Map?)?.cast<String, dynamic>() ?? {}),
-        trainings: ((j['trainings'] as List?) ?? []).map((e) => TrainingEntry.fromJson((e as Map).cast<String, dynamic>())).toList(),
-        meals: ((j['meals'] as List?) ?? []).map((e) => MealEntry.fromJson((e as Map).cast<String, dynamic>())).toList(),
-        progress: ((j['progress'] as List?) ?? []).map((e) => DailyProgress.fromJson((e as Map).cast<String, dynamic>())).toList(),
+        trainings: ((j['trainings'] as List?) ?? [])
+            .map((e) => TrainingEntry.fromJson((e as Map).cast<String, dynamic>()))
+            .toList(),
+        meals:
+            ((j['meals'] as List?) ?? []).map((e) => MealEntry.fromJson((e as Map).cast<String, dynamic>())).toList(),
+        progress: ((j['progress'] as List?) ?? [])
+            .map((e) => DailyProgress.fromJson((e as Map).cast<String, dynamic>()))
+            .toList(),
       );
 }
 
@@ -330,52 +324,57 @@ class _TrainingTabState extends State<TrainingTab> {
     final dayItems = widget.data.trainings.where((t) => _isSameDay(t.date, _selected)).toList()
       ..sort((a, b) => a.type.compareTo(b.type));
 
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        CalendarDatePicker(
-          initialDate: _selected,
-          firstDate: DateTime(DateTime.now().year - 2),
-          lastDate: DateTime(DateTime.now().year + 2),
-          onDateChanged: (d) => setState(() => _selected = d),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                value: _type,
-                items: trainingTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-                decoration: const InputDecoration(labelText: 'Training Type'),
-                onChanged: (v) => setState(() => _type = v ?? trainingTypes.first),
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 80), // extra bottom padding
+        children: [
+          CalendarDatePicker(
+            initialDate: _selected,
+            firstDate: DateTime(DateTime.now().year - 2),
+            lastDate: DateTime(DateTime.now().year + 2),
+            onDateChanged: (d) => setState(() => _selected = d),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _type,
+                  items: trainingTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                  decoration: const InputDecoration(labelText: 'Training Type'),
+                  onChanged: (v) => setState(() => _type = v ?? trainingTypes.first),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: _minutes,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Time (min)'),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _minutes,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Time (min)'),
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ElevatedButton.icon(
-          onPressed: _save,
-          icon: const Icon(Icons.save),
-          label: const Text('Save Training'),
-        ),
-        const Divider(height: 24),
-        Text('Sessions on ${_fmtDate(_selected)}', style: const TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 6),
-        if (dayItems.isEmpty) const Text('No sessions yet.')
-        else ...dayItems.map((e) => ListTile(
-              leading: const Icon(Icons.fitness_center),
-              title: Text('${e.type} • ${e.minutes} min'),
-              trailing: IconButton(icon: const Icon(Icons.delete), onPressed: () => _delete(e)),
-            )),
-      ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+            onPressed: _save,
+            icon: const Icon(Icons.save),
+            label: const Text('Save Training'),
+          ),
+          const Divider(height: 24),
+          Text('Sessions on ${_fmtDate(_selected)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          if (dayItems.isEmpty)
+            const Text('No sessions yet.')
+          else
+            ...dayItems.map((e) => ListTile(
+                  leading: const Icon(Icons.fitness_center),
+                  title: Text('${e.type} • ${e.minutes} min'),
+                  trailing: IconButton(icon: const Icon(Icons.delete), onPressed: () => _delete(e)),
+                )),
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 
@@ -386,7 +385,7 @@ class _TrainingTabState extends State<TrainingTab> {
 
 const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack 1', 'Snack 2'];
 
-// NOTE: make this NON-CONST to avoid const + list mutability issues
+// NON-CONST map to avoid const/list issues
 final Map<String, List<String>> platesByMeal = {
   'Breakfast': [
     '3 eggs + whole-grain bread + apple',
@@ -479,73 +478,90 @@ class _MealsTabState extends State<MealsTab> {
       ..sort((a, b) => a.mealType.compareTo(b.mealType));
     final totalCalories = dayMeals.fold<int>(0, (sum, m) => sum + m.calories);
 
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        CalendarDatePicker(
-          initialDate: _selected,
-          firstDate: DateTime(DateTime.now().year - 2),
-          lastDate: DateTime(DateTime.now().year + 2),
-          onDateChanged: (d) => setState(() => _selected = d),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                value: _mealType,
-                items: mealTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-                decoration: const InputDecoration(labelText: 'Meal Type'),
-                onChanged: (v) {
-                  final nextType = v ?? mealTypes.first;
-                  setState(() {
-                    _mealType = nextType;
-                    _plate = platesByMeal[nextType]!.first;
-                  });
-                },
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 80), // extra bottom padding for total
+        children: [
+          CalendarDatePicker(
+            initialDate: _selected,
+            firstDate: DateTime(DateTime.now().year - 2),
+            lastDate: DateTime(DateTime.now().year + 2),
+            onDateChanged: (d) => setState(() => _selected = d),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _mealType,
+                  items: mealTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                  decoration: const InputDecoration(labelText: 'Meal Type'),
+                  onChanged: (v) {
+                    final nextType = v ?? mealTypes.first;
+                    setState(() {
+                      _mealType = nextType;
+                      _plate = platesByMeal[nextType]!.first;
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _plate,
+                  items: (platesByMeal[_mealType] ?? [])
+                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                      .toList(),
+                  decoration: const InputDecoration(labelText: 'Plate'),
+                  onChanged: (v) => setState(() => _plate = v ?? _plate),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _calCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Calories'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton.icon(onPressed: _saveMeal, icon: const Icon(Icons.add), label: const Text('Add Meal')),
+            ],
+          ),
+          const Divider(height: 24),
+          Text('Meals on ${_fmtDate(_selected)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          if (dayMeals.isEmpty)
+            const Text('No meals yet.')
+          else
+            ...dayMeals.map((m) => ListTile(
+                  leading: const Icon(Icons.restaurant_menu),
+                  title: Text('${m.mealType} • ${m.plate}'),
+                  subtitle: Text('${m.calories} kcal'),
+                  trailing: IconButton(icon: const Icon(Icons.delete), onPressed: () => _delete(m)),
+                )),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 0.5,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.local_fire_department),
+                  const SizedBox(width: 8),
+                  const Text('Total calories:', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 8),
+                  Text('$totalCalories kcal', style: const TextStyle(fontWeight: FontWeight.w700)),
+                ],
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                value: _plate,
-                items: (platesByMeal[_mealType] ?? []).map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
-                decoration: const InputDecoration(labelText: 'Plate'),
-                onChanged: (v) => setState(() => _plate = v ?? _plate),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _calCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Calories'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            ElevatedButton.icon(onPressed: _saveMeal, icon: const Icon(Icons.add), label: const Text('Add Meal')),
-          ],
-        ),
-        const Divider(height: 24),
-        Text('Meals on ${_fmtDate(_selected)}', style: const TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 6),
-        if (dayMeals.isEmpty) const Text('No meals yet.')
-        else ...dayMeals.map((m) => ListTile(
-              leading: const Icon(Icons.restaurant_menu),
-              title: Text('${m.mealType} • ${m.plate}'),
-              subtitle: Text('${m.calories} kcal'),
-              trailing: IconButton(icon: const Icon(Icons.delete), onPressed: () => _delete(m)),
-            )),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: Text('Total calories: $totalCalories kcal', style: const TextStyle(fontWeight: FontWeight.w700)),
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -567,15 +583,12 @@ class _ProgressTabState extends State<ProgressTab> {
   // Profile
   final TextEditingController _ageCtrl = TextEditingController();
   final TextEditingController _heightCtrl = TextEditingController();
+  final TextEditingController _profileWeightCtrl = TextEditingController();
 
   // Day selection + progress
   DateTime _selected = DateTime.now();
   final TextEditingController _weightCtrl = TextEditingController();
   final TextEditingController _proteinCtrl = TextEditingController();
-  bool _measurementsTaken = false;
-  final TextEditingController _waistCtrl = TextEditingController();
-  final TextEditingController _chestCtrl = TextEditingController();
-  final TextEditingController _hipsCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -583,6 +596,7 @@ class _ProgressTabState extends State<ProgressTab> {
     final p = widget.data.profile;
     if (p.age != null) _ageCtrl.text = p.age.toString();
     if (p.heightCm != null) _heightCtrl.text = p.heightCm.toString();
+    if (p.weightKg != null) _profileWeightCtrl.text = p.weightKg.toString();
     _loadDay();
   }
 
@@ -590,11 +604,9 @@ class _ProgressTabState extends State<ProgressTab> {
   void dispose() {
     _ageCtrl.dispose();
     _heightCtrl.dispose();
+    _profileWeightCtrl.dispose();
     _weightCtrl.dispose();
     _proteinCtrl.dispose();
-    _waistCtrl.dispose();
-    _chestCtrl.dispose();
-    _hipsCtrl.dispose();
     super.dispose();
   }
 
@@ -605,10 +617,6 @@ class _ProgressTabState extends State<ProgressTab> {
     );
     _weightCtrl.text = dp.weightKg?.toString() ?? '';
     _proteinCtrl.text = dp.proteinG?.toString() ?? '';
-    _measurementsTaken = dp.measurementsTaken;
-    _waistCtrl.text = dp.waistCm?.toString() ?? '';
-    _chestCtrl.text = dp.chestCm?.toString() ?? '';
-    _hipsCtrl.text = dp.hipsCm?.toString() ?? '';
     setState(() {});
   }
 
@@ -619,7 +627,8 @@ class _ProgressTabState extends State<ProgressTab> {
   void _saveProfile() {
     final age = int.tryParse(_ageCtrl.text.trim());
     final height = int.tryParse(_heightCtrl.text.trim());
-    widget.data.profile = Profile(age: age, heightCm: height);
+    final w = double.tryParse(_profileWeightCtrl.text.trim());
+    widget.data.profile = Profile(age: age, heightCm: height, weightKg: w);
     widget.onChanged(widget.data);
     _snack('Profile saved.');
   }
@@ -627,19 +636,12 @@ class _ProgressTabState extends State<ProgressTab> {
   void _saveDay() {
     final weight = double.tryParse(_weightCtrl.text.trim());
     final protein = int.tryParse(_proteinCtrl.text.trim());
-    final waist = _waistCtrl.text.trim().isEmpty ? null : double.tryParse(_waistCtrl.text.trim());
-    final chest = _chestCtrl.text.trim().isEmpty ? null : double.tryParse(_chestCtrl.text.trim());
-    final hips = _hipsCtrl.text.trim().isEmpty ? null : double.tryParse(_hipsCtrl.text.trim());
 
     final idx = widget.data.progress.indexWhere((e) => _isSameDay(e.date, _selected));
     final dp = DailyProgress(
       date: _selected,
       weightKg: weight,
       proteinG: protein,
-      measurementsTaken: _measurementsTaken,
-      waistCm: waist,
-      chestCm: chest,
-      hipsCm: hips,
     );
     if (idx >= 0) {
       widget.data.progress[idx] = dp;
@@ -654,112 +656,99 @@ class _ProgressTabState extends State<ProgressTab> {
   Widget build(BuildContext context) {
     final cals = _dayCalories();
 
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        Text('Your Profile', style: Theme.of(context).textTheme.titleMedium),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _ageCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Age (years)'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: _heightCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Height (cm)'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Align(
-          alignment: Alignment.centerRight,
-          child: ElevatedButton.icon(onPressed: _saveProfile, icon: const Icon(Icons.save), label: const Text('Save Profile')),
-        ),
-        const Divider(height: 24),
-
-        Text('Daily Progress', style: Theme.of(context).textTheme.titleMedium),
-        CalendarDatePicker(
-          initialDate: _selected,
-          firstDate: DateTime(DateTime.now().year - 2),
-          lastDate: DateTime(DateTime.now().year + 2),
-          onDateChanged: (d) {
-            setState(() => _selected = d);
-            _loadDay();
-          },
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _weightCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Weight (kg)'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: _proteinCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Protein (g)'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        SwitchListTile(
-          value: _measurementsTaken,
-          onChanged: (v) => setState(() => _measurementsTaken = v),
-          title: const Text('Measurements taken today'),
-        ),
-        if (_measurementsTaken)
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 80), // extra bottom padding so Save is visible
+        children: [
+          Text('Your Profile', style: Theme.of(context).textTheme.titleMedium),
           Row(
             children: [
               Expanded(
                 child: TextField(
-                  controller: _waistCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Waist (cm)'),
+                  controller: _ageCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Age (years)'),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(
                 child: TextField(
-                  controller: _chestCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Chest (cm)'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _hipsCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Hips (cm)'),
+                  controller: _heightCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Height (cm)'),
                 ),
               ),
             ],
           ),
-        const SizedBox(height: 8),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.local_fire_department),
-          title: const Text('Calories from Meals (auto)'),
-          subtitle: Text('$cals kcal'),
-        ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: ElevatedButton.icon(onPressed: _saveDay, icon: const Icon(Icons.save), label: const Text('Save Day')),
-        ),
-      ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _profileWeightCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Weight (kg)'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: ElevatedButton.icon(
+                  onPressed: _saveProfile,
+                  icon: const Icon(Icons.save),
+                  label: const Text('Save Profile'),
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 24),
+
+          Text('Daily Progress', style: Theme.of(context).textTheme.titleMedium),
+          CalendarDatePicker(
+            initialDate: _selected,
+            firstDate: DateTime(DateTime.now().year - 2),
+            lastDate: DateTime(DateTime.now().year + 2),
+            onDateChanged: (d) {
+              setState(() => _selected = d);
+              _loadDay();
+            },
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _weightCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Weight (kg)'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _proteinCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Protein (g)'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 0.5,
+            child: ListTile(
+              leading: const Icon(Icons.local_fire_department),
+              title: const Text('Calories from Meals (auto)'),
+              subtitle: Text('$cals kcal'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton.icon(onPressed: _saveDay, icon: const Icon(Icons.save), label: const Text('Save Day')),
+          ),
+        ],
+      ),
     );
   }
 
@@ -815,59 +804,74 @@ class _ChartsTabState extends State<ChartsTab> {
       if (w != null) spots.add(FlSpot(i.toDouble(), w));
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        Row(
-          children: [
-            Expanded(child: OutlinedButton.icon(onPressed: _pickFrom, icon: const Icon(Icons.date_range), label: Text('From: ${_fmtDate(_from)}'))),
-            const SizedBox(width: 8),
-            Expanded(child: OutlinedButton.icon(onPressed: _pickTo, icon: const Icon(Icons.date_range), label: Text('To: ${_fmtDate(_to)}'))),
-          ],
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 260,
-          child: spots.isEmpty
-              ? const Center(child: Text('Add weights in Progress tab to see the chart.'))
-              : LineChart(
-                  LineChartData(
-                    lineBarsData: [
-                      LineChartBarData(spots: spots, isCurved: true, dotData: const FlDotData(show: true)),
-                    ],
-                    titlesData: FlTitlesData(
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          interval: (spots.length / 4).clamp(1, 4).toDouble(),
-                          getTitlesWidget: (v, meta) {
-                            final i = v.toInt();
-                            if (i < 0 || i >= items.length) return const SizedBox.shrink();
-                            final d = items[i].date;
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Text('${d.month}/${d.day}', style: const TextStyle(fontSize: 10)),
-                            );
-                          },
-                        ),
-                      ),
-                      leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 36)),
-                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    ),
-                    gridData: const FlGridData(show: true),
-                    borderData: FlBorderData(show: true),
-                    minX: 0,
-                    maxX: (spots.length - 1).toDouble(),
-                  ),
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _pickFrom,
+                  icon: const Icon(Icons.date_range),
+                  label: Text('From: ${_fmtDate(_from)}'),
                 ),
-        ),
-      ],
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _pickTo,
+                  icon: const Icon(Icons.date_range),
+                  label: Text('To: ${_fmtDate(_to)}'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 260,
+            child: spots.isEmpty
+                ? const Center(child: Text('Add weights in Progress tab to see the chart.'))
+                : LineChart(
+                    LineChartData(
+                      lineBarsData: [
+                        LineChartBarData(spots: spots, isCurved: true, dotData: const FlDotData(show: true)),
+                      ],
+                      titlesData: FlTitlesData(
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            interval: (spots.length / 4).clamp(1, 4).toDouble(),
+                            getTitlesWidget: (v, meta) {
+                              final i = v.toInt();
+                              if (i < 0 || i >= items.length) return const SizedBox.shrink();
+                              final d = items[i].date;
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text('${d.month}/${d.day}', style: const TextStyle(fontSize: 10)),
+                              );
+                            },
+                          ),
+                        ),
+                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 36)),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      ),
+                      gridData: const FlGridData(show: true),
+                      borderData: FlBorderData(show: true),
+                      minX: 0,
+                      maxX: (spots.length - 1).toDouble(),
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
 
 /* ========================= UTIL ========================= */
 
-String _fmtDate(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+String _fmtDate(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 bool _isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
