@@ -202,16 +202,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   AppData _data = AppData(profile: Profile(), trainings: [], meals: [], progress: []);
   bool _loading = true;
 
-  // Shared helpers
-  void _snack(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-
-  @override
-  void initState() {
-    super.initState();
-    _tab = TabController(length: 4, vsync: this);
-    _load();
-  }
-
   Future<void> _load() async {
     final d = await DataStore.load();
     setState(() {
@@ -222,6 +212,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   Future<void> _save() async {
     await DataStore.save(_data);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 4, vsync: this);
+    _load();
   }
 
   @override
@@ -251,9 +248,27 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           : TabBarView(
               controller: _tab,
               children: [
-                TrainingTab(data: _data, onChanged: (d) => setState(() => _data = d).._save()),
-                MealsTab(data: _data, onChanged: (d) => setState(() => _data = d).._save()),
-                ProgressTab(data: _data, onChanged: (d) => setState(() => _data = d).._save()),
+                TrainingTab(
+                  data: _data,
+                  onChanged: (d) {
+                    setState(() => _data = d);
+                    _save();
+                  },
+                ),
+                MealsTab(
+                  data: _data,
+                  onChanged: (d) {
+                    setState(() => _data = d);
+                    _save();
+                  },
+                ),
+                ProgressTab(
+                  data: _data,
+                  onChanged: (d) {
+                    setState(() => _data = d);
+                    _save();
+                  },
+                ),
                 ChartsTab(data: _data),
               ],
             ),
@@ -299,7 +314,6 @@ class _TrainingTabState extends State<TrainingTab> {
     }
     final entry = TrainingEntry(date: _selected, type: _type, minutes: mins);
 
-    // Replace if same date & type? Keep simple: append new; allow multiple sessions/day.
     widget.data.trainings.add(entry);
     widget.onChanged(widget.data);
     _minutes.clear();
@@ -372,7 +386,8 @@ class _TrainingTabState extends State<TrainingTab> {
 
 const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack 1', 'Snack 2'];
 
-const platesByMeal = {
+// NOTE: make this NON-CONST to avoid const + list mutability issues
+final Map<String, List<String>> platesByMeal = {
   'Breakfast': [
     '3 eggs + whole-grain bread + apple',
     'Greek yogurt + honey + walnuts',
@@ -565,11 +580,22 @@ class _ProgressTabState extends State<ProgressTab> {
   @override
   void initState() {
     super.initState();
-    // Load current profile
     final p = widget.data.profile;
     if (p.age != null) _ageCtrl.text = p.age.toString();
     if (p.heightCm != null) _heightCtrl.text = p.heightCm.toString();
     _loadDay();
+  }
+
+  @override
+  void dispose() {
+    _ageCtrl.dispose();
+    _heightCtrl.dispose();
+    _weightCtrl.dispose();
+    _proteinCtrl.dispose();
+    _waistCtrl.dispose();
+    _chestCtrl.dispose();
+    _hipsCtrl.dispose();
+    super.dispose();
   }
 
   void _loadDay() {
@@ -588,7 +614,7 @@ class _ProgressTabState extends State<ProgressTab> {
 
   int _dayCalories() {
     return widget.data.meals.where((m) => _isSameDay(m.date, _selected)).fold(0, (sum, m) => sum + m.calories);
-    }
+  }
 
   void _saveProfile() {
     final age = int.tryParse(_ageCtrl.text.trim());
@@ -605,7 +631,6 @@ class _ProgressTabState extends State<ProgressTab> {
     final chest = _chestCtrl.text.trim().isEmpty ? null : double.tryParse(_chestCtrl.text.trim());
     final hips = _hipsCtrl.text.trim().isEmpty ? null : double.tryParse(_hipsCtrl.text.trim());
 
-    // Find existing or add
     final idx = widget.data.progress.indexWhere((e) => _isSameDay(e.date, _selected));
     final dp = DailyProgress(
       date: _selected,
@@ -676,4 +701,173 @@ class _ProgressTabState extends State<ProgressTab> {
               child: TextField(
                 controller: _weightCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecorat
+                decoration: const InputDecoration(labelText: 'Weight (kg)'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _proteinCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Protein (g)'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          value: _measurementsTaken,
+          onChanged: (v) => setState(() => _measurementsTaken = v),
+          title: const Text('Measurements taken today'),
+        ),
+        if (_measurementsTaken)
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _waistCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Waist (cm)'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _chestCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Chest (cm)'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _hipsCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Hips (cm)'),
+                ),
+              ),
+            ],
+          ),
+        const SizedBox(height: 8),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.local_fire_department),
+          title: const Text('Calories from Meals (auto)'),
+          subtitle: Text('$cals kcal'),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: ElevatedButton.icon(onPressed: _saveDay, icon: const Icon(Icons.save), label: const Text('Save Day')),
+        ),
+      ],
+    );
+  }
+
+  void _snack(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+}
+
+/* ========================= CHARTS TAB ========================= */
+
+class ChartsTab extends StatefulWidget {
+  final AppData data;
+  const ChartsTab({super.key, required this.data});
+
+  @override
+  State<ChartsTab> createState() => _ChartsTabState();
+}
+
+class _ChartsTabState extends State<ChartsTab> {
+  DateTime _from = DateTime.now().subtract(const Duration(days: 30));
+  DateTime _to = DateTime.now();
+
+  Future<void> _pickFrom() async {
+    final p = await showDatePicker(
+      context: context,
+      initialDate: _from,
+      firstDate: DateTime(DateTime.now().year - 2),
+      lastDate: DateTime.now(),
+    );
+    if (p != null) setState(() => _from = p);
+  }
+
+  Future<void> _pickTo() async {
+    final p = await showDatePicker(
+      context: context,
+      initialDate: _to,
+      firstDate: DateTime(DateTime.now().year - 2),
+      lastDate: DateTime(DateTime.now().year + 2),
+    );
+    if (p != null) setState(() => _to = p);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.data.progress.where((e) {
+      final d = DateTime(e.date.year, e.date.month, e.date.day);
+      return !d.isBefore(DateTime(_from.year, _from.month, _from.day)) &&
+          !d.isAfter(DateTime(_to.year, _to.month, _to.day));
+    }).toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    final spots = <FlSpot>[];
+    for (int i = 0; i < items.length; i++) {
+      final w = items[i].weightKg;
+      if (w != null) spots.add(FlSpot(i.toDouble(), w));
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        Row(
+          children: [
+            Expanded(child: OutlinedButton.icon(onPressed: _pickFrom, icon: const Icon(Icons.date_range), label: Text('From: ${_fmtDate(_from)}'))),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton.icon(onPressed: _pickTo, icon: const Icon(Icons.date_range), label: Text('To: ${_fmtDate(_to)}'))),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 260,
+          child: spots.isEmpty
+              ? const Center(child: Text('Add weights in Progress tab to see the chart.'))
+              : LineChart(
+                  LineChartData(
+                    lineBarsData: [
+                      LineChartBarData(spots: spots, isCurved: true, dotData: const FlDotData(show: true)),
+                    ],
+                    titlesData: FlTitlesData(
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          interval: (spots.length / 4).clamp(1, 4).toDouble(),
+                          getTitlesWidget: (v, meta) {
+                            final i = v.toInt();
+                            if (i < 0 || i >= items.length) return const SizedBox.shrink();
+                            final d = items[i].date;
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text('${d.month}/${d.day}', style: const TextStyle(fontSize: 10)),
+                            );
+                          },
+                        ),
+                      ),
+                      leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 36)),
+                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    ),
+                    gridData: const FlGridData(show: true),
+                    borderData: FlBorderData(show: true),
+                    minX: 0,
+                    maxX: (spots.length - 1).toDouble(),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+/* ========================= UTIL ========================= */
+
+String _fmtDate(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+bool _isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
