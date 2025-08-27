@@ -20,7 +20,7 @@ jobs:
       - name: Flutter version
         run: flutter --version
 
-      # ⬇️ Create platform folders (android/ios/web) from your pubspec/lib
+      # Create missing android/ ios/ etc.
       - name: Scaffold Flutter project
         run: flutter create .
 
